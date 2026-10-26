@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>📚BDP - Biblioteca Digital Pessoal📚</title>
+        <!-- Carrega os estilos que organizam a aparência e o layout da biblioteca. -->
+        <link rel="stylesheet" href="css/estilos.css">
+    </head>
+
+    <body>
+        <!-- Cabeçalho com a busca, o filtro por categoria e o acesso ao gerenciamento. -->
+        <header
+            style="background: url('imagens/capa.jpg') center / cover no-repeat;">
+            <h1>Biblioteca Digital Pessoal</h1>
+            <div class="buscar">
+                <!-- Agrupa o campo de texto e a ação para limpar a consulta. -->
+                <div class="campo-busca">
+                    <input id="livro" placeholder="Buscar por título ou autor"
+                        type="text">
+
+                    <!-- Limpa o texto digitado sem alterar a categoria aplicada. -->
+                    <p class="limpar-busca">
+                        <button id="limpar-busca" class="texto-limpar"
+                            type="button">
+                            Limpar busca
+                        </button>
+                    </p>
+                </div>
+
+                <!-- Seleciona a categoria aplicada ao confirmar a busca. -->
+                <select id="categorias">
+                    <option value="todos" selected>Todas as categorias</option>
+                </select>
+
+                <!-- Confirma a busca com o texto e a categoria selecionada. -->
+                <button id="pesquisar" type="button" aria-label="Buscar"
+                    title="Buscar">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+                        stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        aria-hidden="true" focusable="false">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="gerenciar-bibliotera">
+                <a href="#gerenciar" id="gerenciar-biblioteca">Gerenciar
+                    biblioteca</a>
+            </div>
+
+            <!-- Reúne o controle de acessibilidade e os ajustes de tamanho da fonte. -->
+            <div class="acessibilidade"
+                aria-label="Controles de acessibilidade">
+                <button id="btn-contraste" type="button">Acessibilidade</button>
+                <button id="btn-aumentar" type="button"
+                    aria-label="Aumentar fonte">A+</button>
+                <button id="btn-diminuir" type="button"
+                    aria-label="Diminuir fonte">A-</button>
+            </div>
+        </header>
+
+        <!-- Menu de categorias para filtrar a estante com um clique. -->
+        <div class="categorias-layout">
+            <nav aria-label="Filtrar por categoria">
+                <section class="catagorias" aria-labelledby="titulo-categorias">
+                    <h2 id="titulo-categorias">Categorias</h2>
+                    <button class="categoria-item" data-categoria="todos"
+                        type="button">Todas</button>
+                    <button class="favoritos" data-categoria="favoritos"
+                        type="button">Meus favoritos</button>
+                    <button class="categoria-item" data-categoria="artigos"
+                        type="button">Artigos</button>
+                    <button class="categoria-item" data-categoria="auto-ajuda"
+                        type="button">Auto-ajuda e desenv.
+                        pessoal</button>
+                    <button class="categoria-item" data-categoria="aventura"
+                        type="button">Aventura</button>
+                    <button class="categoria-item" data-categoria="biografias"
+                        type="button">Biografias</button>
+                    <button class="categoria-item" data-categoria="ficcao"
+                        type="button">Ficção</button>
+                    <button class="categoria-item"
+                        data-categoria="ficcao-policial" type="button">Ficção
+                        policial</button>
+                    <button class="categoria-item" data-categoria="filosofia"
+                        type="button">Filosofia</button>
+                    <button class="categoria-item" data-categoria="misterio"
+                        type="button">Mistério</button>
+                    <button class="categoria-item"
+                        data-categoria="negocios-e-financas"
+                        type="button">Negócios e
+                        finanças</button>
+                    <button class="categoria-item" data-categoria="psicologia"
+                        type="button">Psicologia</button>
+                    <button class="categoria-item"
+                        data-categoria="quadrinhos-e-mangas"
+                        type="button">Quadrinhos e
+                        Mangás</button>
+                    <button class="categoria-item" data-categoria="religiao"
+                        type="button">Religião</button>
+                    <button class="categoria-item" data-categoria="romance"
+                        type="button">Romance</button>
+                    <button class="categoria-item" data-categoria="suspense"
+                        type="button">Suspense</button>
+                    <button class="categoria-item"
+                        data-categoria="ciencia-tecnologia-computacao"
+                        type="button">Ciência,
+                        Tecnologia &amp; Computação</button>
+                </section>
+            </nav>
+        </div>
+        <main>
+            <!-- Área onde o JavaScript monta os cards e mostra o resultado da busca. -->
+            <section id="estante">
+                <h2>Minha estante</h2>
+
+                <!-- Informa quando os filtros atuais não encontram livros. -->
+                <p id="mensagem-busca" role="status" aria-live="polite"
+                    hidden></p>
+
+                <!-- Exibe o resultado das ações feitas na biblioteca. -->
+                <p id="mensagem-operacao-biblioteca"
+                    class="mensagem-operacao-biblioteca"
+                    role="status" aria-live="polite" hidden></p>
+
+                <!-- O JavaScript usa estes cards como fonte para os livros iniciais. -->
+                <section class="video-grid" aria-label="Lista de livros">
+                    <article class="video-card" data-id="livro-inicial-1"
+                        data-titulo="Prospecção Fanática"
+                        data-autor="Jeb Blount"
+                        data-categoria-id="negocios-e-financas"
+                        data-formato="Pdf"
+                        data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                    <article class="video-card" data-id="livro-inicial-2"
+                        data-titulo="Meditações"
+                        data-autor="Marco Aurélio" data-categoria-id="filosofia"
+                        data-formato="Pdf"
+                        data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                    <article class="video-card" data-id="livro-inicial-3"
+                        data-titulo="A Arte de Viver"
+                        data-autor="Epicteto" data-categoria-id="filosofia"
+                        data-formato="Pdf"
+                        data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                    <article class="video-card" data-id="livro-inicial-4"
+                        data-titulo="Venda!" data-autor="Dale Carnegie"
+                        data-categoria-id="negocios-e-financas"
+                        data-formato="Pdf" data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                    <article class="video-card" data-id="livro-inicial-5"
+                        data-titulo="Título do livro"
+                        data-autor="Nome do autor" data-categoria-id="ficcao"
+                        data-formato="Pdf"
+                        data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                    <article class="video-card" data-id="livro-inicial-6"
+                        data-titulo="O profeta" data-autor="Khalil Gibram"
+                        data-categoria-id="filosofia" data-formato="Pdf"
+                        data-url="https://exemplo.com/livro">
+                        <div class="video-card__thumbnail"
+                            aria-hidden="true"></div>
+                        <div class="video-card__content"></div>
+                    </article>
+
+                </section>
+            </section>
+
+            <!-- Área de gerenciamento com formulários de livros e categorias. -->
+
+            <section class="gerenciar-biblioteca" aria-labelledby="gerenciar">
+
+                <h2 id="gerenciar">
+                    <p>Gerenciar biblioteca</p>
+                </h2>
+                <div class="gerenciar-formularios">
+                    <!-- Formulário para cadastrar um livro ou artigo na estante. -->
+                    <section class="gerenciar-livros"
+                        aria-labelledby="titulo-adicionar-livro">
+
+                        <h3 id="titulo-adicionar-livro">Adicionar livro</h3>
+                        <form id="form-sugestao">
+
+                            <div class="campo-upload-livro">
+                                <label for="arquivo-livro" class="upload-area"
+                                    id="upload-area-livro" tabindex="0"
+                                    role="button"
+                                    aria-label="Selecione ou arraste um arquivo PDF, EPUB ou MOBI">
+                                    <input id="arquivo-livro"
+                                        name="arquivo-livro" type="file"
+                                        accept=".pdf,.epub,.mobi,application/pdf,application/epub+zip,application/x-mobipocket-ebook"
+                                        hidden>
+                                    <span class="upload-area-texto">Clique para
+                                        selecionar ou arraste o arquivo
+                                        aqui</span>
+                                </label>
+
+                                <p id="mensagem-upload" class="mensagem-upload"
+                                    aria-live="polite" hidden></p>
+
+                                <div id="arquivo-selecionado"
+                                    class="arquivo-selecionado" hidden>
+                                    <div class="arquivo-info">
+                                        <span class="arquivo-nome"></span>
+                                        <span class="arquivo-tamanho"></span>
+                                    </div>
+                                    <button type="button"
+                                        class="botao-remover-arquivo"
+                                        id="remover-arquivo">Remover</button>
+                                </div>
+                            </div>
+                            <label for="nome">Título</label>
+                            <input id="nome" name="nome" type="text"
+                                placeholder="Digite o título do livro"
+                                maxlength="60"
+                                required>
+
+                            <label for="autor">Autor</label>
+                            <input id="autor" name="autor" type="text"
+                                placeholder="Digite o autor do livro"
+                                maxlength="60"
+                                required>
+
+                            <label for="link-livro">Link do livro</label>
+                            <!-- Campo de URL com um botão para colar o conteúdo da área de transferência. -->
+                            <div class="campo-link">
+                                <button type="button" id="colar-link"
+                                    class="botao-colar" aria-label="Colar link"
+                                    title="Colar link">
+                                    <img src="imagens/icone-colar.svg"
+                                        alt="colar url">
+                                </button>
+                                <input id="link-livro" name="link-livro"
+                                    type="url" placeholder="https://...">
+                            </div>
+
+                            <label for="tema">Categoria</label>
+                            <select id="tema" name="tema" required>
+                                <option value selected
+                                    disabled>Selecione</option>
+                            </select>
+
+                            <label for="formato">Formato</label>
+                            <select id="formato" name="formato" required>
+                                <option value selected disabled>Selecione o
+                                    formato</option>
+                                <option value="Pdf">Pdf</option>
+                                <option value="E-pub">E-pub</option>
+                                <option value="tipo-outros">Outros</option>
+                            </select>
+
+                            <button class="botao-adicionar"
+                                type="submit">Adicionar livro</button>
+                            <p id="mensagem-form" class="mensagem-form"
+                                role="status" aria-live="polite"></p>
+                        </form>
+                    </section>
+
+                    <!-- Área para adicionar categorias e excluir as que não estão protegidas. -->
+                    <section class="gerenciar-categorias"
+                        aria-labelledby="titulo-adicionar-categoria">
+                        <h3 id="titulo-adicionar-categoria">Adicionar
+                            categoria</h3>
+                        <form id="form-adicionar-categoria">
+                            <label for="nova-categoria">Nome da nova
+                                categoria</label>
+                            <input id="nova-categoria" name="nova-categoria"
+                                type="text"
+                                placeholder="Digite o nome da nova categoria"
+                                maxlength="30" required>
+                            <button class="botao-adicionar-categoria"
+                                type="submit">Adicionar categoria</button>
+                            <p id="mensagem-form-categoria"
+                                class="mensagem-form" role="status"
+                                aria-live="polite"></p>
+                        </form>
+                        <div class="controles-excluir-categoria">
+                            <h3 id="titulo-adicionar-categoria">Excluir categoria</h3>
+                            <label for="categoria-para-excluir">Categoria para
+                                excluir</label>
+                            <select id="categoria-para-excluir">
+                                <option value selected>Selecione uma
+                                    categoria</option>
+                            </select>
+                            <button id="excluir-categoria" type="button">
+                                Excluir categoria
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+        </main>
+        <br><br><br>
+        <footer>
+            <ccenter>BDP - Biblioteca Digital Pessoal v.10 -Todos os
+                direitos reservados</ccenter>
+        </footer>
+
+        <!-- Carrega a lógica de busca, cadastro, filtros e ações da estante. -->
+        <script src="js/script.js" defer></script>
+    </body>
+
+</html>
