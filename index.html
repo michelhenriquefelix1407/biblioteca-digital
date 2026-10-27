@@ -51,6 +51,15 @@
                     biblioteca</a>
             </div>
 
+            <section id="google-auth" class="google-auth"
+                aria-label="Autenticação Google">
+                <button id="google-auth-button" type="button">
+                    Conectar com Google
+                </button>
+                <span id="google-auth-status" class="google-auth-status"
+                    aria-live="polite"></span>
+            </section>
+
             <!-- Reúne o controle de acessibilidade e os ajustes de tamanho da fonte. -->
             <div class="acessibilidade"
                 aria-label="Controles de acessibilidade">
@@ -299,7 +308,8 @@
                                 aria-live="polite"></p>
                         </form>
                         <div class="controles-excluir-categoria">
-                            <h3 id="titulo-adicionar-categoria">Excluir categoria</h3>
+                            <h3 id="titulo-adicionar-categoria">Excluir
+                                categoria</h3>
                             <label for="categoria-para-excluir">Categoria para
                                 excluir</label>
                             <select id="categoria-para-excluir">
@@ -322,7 +332,12 @@
         </footer>
 
         <!-- Carrega a lógica de busca, cadastro, filtros e ações da estante. -->
-        <script src="js/script.js" defer></script>
+
+        <script src="config.js"></script>
+        <script id="google-identity-services"
+            src="https://accounts.google.com/gsi/client" async defer></script>
+        <script src="auth.js" defer></script>
+        <script src="js/script.js" defer></script> <!-- seus scripts atuais -->
     </body>
 
 </html>

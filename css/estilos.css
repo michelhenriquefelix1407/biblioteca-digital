@@ -60,6 +60,42 @@ header h1 {
     color: #fff
 }
 
+/* Organiza o controle opcional de autenticação Google no cabeçalho. */
+.google-auth {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.google-auth button {
+    min-height: 36px;
+    border: 1px solid #397c63;
+    background: #246b55;
+    color: #fff;
+}
+
+.google-auth button:hover,
+.google-auth button:focus-visible {
+    background: #2f8066;
+}
+
+.google-auth button:disabled {
+    cursor: wait;
+    opacity: 0.75;
+}
+
+.google-auth-status {
+    color: #d5e5db;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+}
+
+.google-auth-status--error {
+    color: #ffb4ab;
+}
+
 /* Agrupa os controles de acessibilidade e filtros, permitindo que quebrem linha. */
 .acessibilidade,
 .filtros {
