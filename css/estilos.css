@@ -46,58 +46,182 @@ body {
 header {
     min-height: 200px;
     padding: 18px 32px;
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(320px, 1fr) auto auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 24px;
+    gap: 18px;
     border-bottom: 1px solid #dce3df;
 }
 
 /* Ajusta o título principal do cabeçalho. */
 header h1 {
     margin: 0;
+    max-width: 190px;
     font-size: 1.5rem;
-    color: #fff
-}
-
-/* Organiza o controle opcional de autenticação Google no cabeçalho. */
-.google-auth {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-.google-auth button {
-    min-height: 36px;
-    border: 1px solid #397c63;
-    background: #246b55;
     color: #fff;
 }
 
-.google-auth button:hover,
-.google-auth button:focus-visible {
+/* Mantém autenticação e acessibilidade como um único grupo no cabeçalho. */
+.header-account-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.google-auth {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.google-auth #google-auth-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 7px 12px;
+    border: 1px solid #397c63;
+    background: #246b55;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.google-auth #google-auth-button svg {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.google-auth #google-auth-button:hover,
+.google-auth #google-auth-button:focus-visible {
     background: #2f8066;
 }
 
-.google-auth button:disabled {
+.google-auth #google-auth-button:disabled {
     cursor: wait;
     opacity: 0.75;
 }
 
 .google-auth-status {
-    color: #d5e5db;
-    font-size: 0.9rem;
-    overflow-wrap: anywhere;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    max-width: 205px;
+    padding-left: 12px;
+    border-left: 1px solid rgba(220, 227, 223, 0.42);
+    color: #f1f1f1;
+    font-size: 0.82rem;
+    line-height: 1.25;
+}
+
+.google-auth-status[hidden],
+.google-auth-email[hidden] {
+    display: none;
 }
 
 .google-auth-status--error {
     color: #ffb4ab;
 }
 
-/* Agrupa os controles de acessibilidade e filtros, permitindo que quebrem linha. */
-.acessibilidade,
+.google-auth-user-icon {
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.google-auth-status--error .google-auth-user-icon {
+    display: none;
+}
+
+.google-auth-status-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.google-auth-email {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    color: #d5e5db;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.acessibilidade {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding-left: 12px;
+    border-left: 1px solid rgba(220, 227, 223, 0.42);
+}
+
+.acessibilidade button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border: 1px solid rgba(220, 227, 223, 0.65);
+    border-radius: 6px;
+    background: rgba(3, 8, 18, 0.35);
+    color: #fff;
+}
+
+.acessibilidade #btn-contraste {
+    gap: 6px;
+    padding: 7px 8px;
+    font-size: 0.83rem;
+    white-space: nowrap;
+}
+
+.acessibilidade #btn-contraste svg {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.acessibilidade #btn-aumentar,
+.acessibilidade #btn-diminuir {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+
+.header-account-controls button:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.header-account-controls button:focus-visible {
+    outline: 2px solid #b8e4d1;
+    outline-offset: 2px;
+}
+
+/* Agrupa filtros que podem ocupar mais de uma linha. */
 .filtros {
     display: flex;
     flex-wrap: wrap;
@@ -114,19 +238,6 @@ button {
     color: #e4e0e0;
     cursor: pointer;
     font-weight: bold;
-}
-
-.acessibilidade #btn-aumentar,
-.acessibilidade #btn-diminuir {
-    width: 35px;
-    height: 25px;
-    padding: 0;
-    border: 1px solid #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.85rem;
-    line-height: 1;
 }
 
 /* Indica a interação por mouse, teclado ou estado ativo nos controles. */
@@ -230,6 +341,7 @@ button:focus-visible,
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    min-width: 0;
 }
 
 /* Define o espaço ao redor da área de categorias. */
@@ -531,7 +643,7 @@ section>h2 {
     cursor: pointer;
     font-size: 1.25rem;
     line-height: 1;
-    font-weight: 700px;
+    font-weight: 700;
 }
 
 /* Diferencia visualmente o livro que já está na lista de favoritos. */
@@ -580,7 +692,7 @@ section>h2 {
     font-size: 1.25rem;
     list-style: none;
     color: #ffffff;
-    font-weight: 700px;
+    font-weight: 700;
 
 }
 
@@ -1073,6 +1185,35 @@ footer {
 }
 
 /* Adapta o layout para telas menores. */
+@media (min-width: 801px) and (max-width: 1280px) {
+    header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px 22px;
+    }
+
+    header h1 {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .buscar {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+        max-width: 650px;
+    }
+
+    .gerenciar-bibliotera {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .header-account-controls {
+        grid-column: 1 / -1;
+        justify-self: end;
+    }
+}
+
 @media (max-width: 800px) {
 
     /* Empilha os formulários para posicionar categorias abaixo dos livros. */
@@ -1105,9 +1246,30 @@ footer {
 
     /* Empilha os itens do cabeçalho em telas menores. */
     header {
+        display: flex;
         align-items: flex-start;
         flex-direction: column;
         padding: 18px;
+    }
+
+    .header-account-controls {
+        width: 100%;
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .google-auth {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+    }
+
+    .google-auth-status {
+        max-width: min(100%, 260px);
+    }
+
+    .acessibilidade {
+        padding-left: 0;
+        border-left: 0;
     }
 
     /* Reduz o espaço do conteúdo principal em telas menores. */
@@ -1138,4 +1300,28 @@ footer {
         gap: 4px;
         width: 100%;
     }
+}
+
+/* Mostra visualmente o estado da sincronização da biblioteca com o Google Drive. */
+/* === FASE 3: Indicador de sincronização Drive === */
+.drive-sync-status {
+    font-size: 0.8rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.drive-sync-status.saving {
+    background: #ffd54f;
+    color: #000;
+}
+
+.drive-sync-status.saved {
+    background: #4caf50;
+    color: #fff;
+}
+
+.drive-sync-status.error {
+    background: #f44336;
+    color: #fff;
 }

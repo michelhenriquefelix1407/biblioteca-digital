@@ -1,12 +1,16 @@
 // Guarda referências aos elementos principais e às chaves do armazenamento local.
 const secaoCategorias = document.querySelector(".catagorias");
 const formularioAdicionar = document.querySelector("#form-adicionar-categoria");
-const chaveCategorias = "bdp-categorias-v1";
-const chaveLivros = "bdp-livros-v1";
-const chaveLivrosIniciaisImportados = "bdp-livros-iniciais-importados-v1";
+const chaveCategorias = "bdp-categorias-v1";      // mantida só para migração futura (Fase 5)
+const chaveLivros = "bdp-livros-v1";              // mantida só para migração futura (Fase 5)
+const chaveLivrosIniciaisImportados = "bdp-livros-iniciais-importados-v1"; // mantida só para migração
+
+// === NOVO: estado Drive (Fase 3) ===
+let drivePronto = false;              // true após DriveAPI.init() + carregarDoDrive()
+let bibliotecaDrive = { livros: [], categorias: [] };  // cache em memória do biblioteca.json
+// ====================================
 const idCategoriaSemCategoria = "sem-categoria";
 const nomeCategoriaSemCategoria = "Sem categoria";
-const idsCategoriasLegadasSemCategoria = new Set();
 let temporizadorMensagemOperacao;
 const formularioLivro = document.querySelector("#form-sugestao");
 const estante = document.querySelector("#estante");
@@ -43,58 +47,22 @@ botaoDiminuir.addEventListener("click", function () {
   }
 });
 
-// Recupera categorias salvas ou usa a lista inicial de botões do HTML.
-function carregarCategorias() {
-  let categoriasCarregadas;
-
-  try {
-    const categoriasSalvas = JSON.parse(localStorage.getItem(chaveCategorias));
-    if (
-      Array.isArray(categoriasSalvas) &&
-      categoriasSalvas.every(
-        (categoria) =>
-          typeof categoria?.id === "string" &&
-          typeof categoria?.nome === "string"
-      )
-    ) {
-      categoriasCarregadas = categoriasSalvas.filter(
-        (categoria) => categoria.id !== "todos" && categoria.id !== "favoritos"
-      );
-    }
-  } catch { }
-
-  if (!categoriasCarregadas) {
-    categoriasCarregadas = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
+// Recupera categorias do Drive (bibliotecaDrive) ou fallback para botões do HTML.
+async function carregarCategorias() {
+  if (!drivePronto) {
+    // Fallback temporário: categorias do HTML (antes do Drive carregar)
+    return [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
       .map((botao) => ({
         id: botao.dataset.categoria,
         nome: botao.textContent.replace(/\s+/g, " ").trim()
       }))
       .filter((categoria) => categoria.id && categoria.nome);
   }
-
-  const categoriasSemCategoria = categoriasCarregadas.filter(
-    (categoria) =>
-      categoria.id === idCategoriaSemCategoria ||
-      normalizarTexto(categoria.nome) === normalizarTexto(nomeCategoriaSemCategoria)
-  );
-
-  categoriasSemCategoria.forEach((categoria) => {
-    if (categoria.id !== idCategoriaSemCategoria) {
-      idsCategoriasLegadasSemCategoria.add(categoria.id);
-    }
-  });
-
-  return [
-    ...categoriasCarregadas.filter(
-      (categoria) =>
-        categoria.id !== idCategoriaSemCategoria &&
-        normalizarTexto(categoria.nome) !== normalizarTexto(nomeCategoriaSemCategoria)
-    ),
-    { id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria }
-  ];
+  // Categorias já vêm normalizadas do biblioteca.json (incluindo "sem-categoria")
+  return bibliotecaDrive.categorias || [];
 }
 
-let categorias = carregarCategorias();
+let categorias = [];          // será preenchido assincronamente em inicializarApp()
 // Mantém o filtro aplicado independente da escolha ainda não confirmada no seletor.
 let categoriaAplicada = "todos";
 
@@ -209,19 +177,15 @@ function atualizarSeletoresCategorias() {
   });
 }
 
-// Salva as categorias no armazenamento local do navegador.
+// Salva categorias no Drive (via biblioteca.json com debounce).
 function salvarCategorias() {
-  try {
-    localStorage.setItem(chaveCategorias, JSON.stringify(categorias));
-  } catch { }
+  if (!drivePronto) return;
+  bibliotecaDrive.categorias = categorias;
+  DriveAPI.salvarBiblioteca(bibliotecaDrive);
 }
 
 // Carrega os livros e migra associações antigas para o identificador reservado de "Sem categoria".
-let livros = carregarLivros().map((livro) =>
-  idsCategoriasLegadasSemCategoria.has(livro.categoriaId)
-    ? { ...livro, categoriaId: idCategoriaSemCategoria }
-    : livro
-);
+let livros = [];   // será preenchido assincronamente em inicializarApp()
 
 // Gera um identificador estável e compatível com URLs a partir do nome da categoria.
 function criarIdCategoria(nome) {
@@ -248,58 +212,21 @@ function criarLivrosIniciais() {
     }));
 }
 
-// Recupera os livros salvos e incorpora os registros iniciais do HTML quando necessário.
-function carregarLivros() {
-  const livrosIniciais = criarLivrosIniciais();
-  let livrosSalvos = null;
-
-  try {
-    const dadosSalvos = localStorage.getItem(chaveLivros);
-    if (dadosSalvos !== null) {
-      const dados = JSON.parse(dadosSalvos);
-      if (Array.isArray(dados)) livrosSalvos = dados;
-    }
-  } catch { }
-
-  if (livrosSalvos === null) {
-    try {
-      localStorage.setItem(chaveLivrosIniciaisImportados, "true");
-    } catch { }
-    return livrosIniciais;
+// Recupera os livros do Drive (bibliotecaDrive) ou fallback para cards iniciais do HTML.
+async function carregarLivros() {
+  if (!drivePronto) {
+    return criarLivrosIniciais();
   }
-
-  try {
-    if (localStorage.getItem(chaveLivrosIniciaisImportados) === "true") {
-      return livrosSalvos;
-    }
-  } catch { }
-
-  const idsSalvos = new Set(
-    livrosSalvos
-      .map((livro) => livro?.id)
-      .filter((id) => typeof id === "string")
-  );
-  const livrosAtualizados = [
-    ...livrosSalvos,
-    ...livrosIniciais.filter((livro) => !idsSalvos.has(livro.id))
-  ];
-
-  try {
-    localStorage.setItem(chaveLivrosIniciaisImportados, "true");
-  } catch { }
-
-  return livrosAtualizados;
+  const livrosDrive = bibliotecaDrive.livros || [];
+  return livrosDrive;  // sem migração de IDs legados
 }
 
-// Salva os livros no armazenamento local e informa se a gravação falhar.
+// Salva livros no Drive (via biblioteca.json com debounce).
 function salvarLivros(livrosParaSalvar = livros) {
-  try {
-    localStorage.setItem(chaveLivros, JSON.stringify(livrosParaSalvar));
-    return true;
-  } catch (erro) {
-    console.error("Não foi possível salvar os livros.", erro);
-    return false;
-  }
+  if (!drivePronto) return true;
+  bibliotecaDrive.livros = livrosParaSalvar;
+  DriveAPI.salvarBiblioteca(bibliotecaDrive);
+  return true;
 }
 
 // Preenche o seletor de destino com as categorias disponíveis.
@@ -600,41 +527,27 @@ document.querySelector("#excluir-categoria").addEventListener("click", () => {
   const chavesGravadas = [];
 
   try {
+    // Backup em memória para rollback (sem localStorage)
     valoresAnteriores = [
-      [chaveLivros, localStorage.getItem(chaveLivros)],
-      [chaveCategorias, localStorage.getItem(chaveCategorias)]
+      [chaveLivros, JSON.stringify(livros)],
+      [chaveCategorias, JSON.stringify(categorias)]
     ];
     valoresAnterioresCapturados = true;
-    localStorage.setItem(chaveLivros, JSON.stringify(livrosAtualizados));
-    chavesGravadas.push(chaveLivros);
-    localStorage.setItem(chaveCategorias, JSON.stringify(categoriasAtualizadas));
-    chavesGravadas.push(chaveCategorias);
+    // Atualiza arrays locais e salva via DriveAPI
+    livros = livrosAtualizados;
+    categorias = categoriasAtualizadas;
+    salvarLivros(livros);
+    salvarCategorias();
+    chavesGravadas.push(chaveLivros, chaveCategorias);
   } catch (erro) {
     console.error("Não foi possível salvar a exclusão da categoria.", erro);
-    let restauracaoConcluida = true;
+    // Rollback em memória (restaura arrays locais)
+    livros = JSON.parse(valoresAnteriores[0][1]);
+    categorias = JSON.parse(valoresAnteriores[1][1]);
+    ordenarCategorias();
+    renderizarLivros();
 
-    if (valoresAnterioresCapturados) {
-      chavesGravadas.forEach((chaveGravada) => {
-        const [, valor] = valoresAnteriores.find(
-          ([chave]) => chave === chaveGravada
-        );
-
-        try {
-          if (valor === null) {
-            localStorage.removeItem(chaveGravada);
-          } else {
-            localStorage.setItem(chaveGravada, valor);
-          }
-        } catch (erroRestauracao) {
-          restauracaoConcluida = false;
-          console.error(`Não foi possível restaurar os dados de ${chaveGravada}.`, erroRestauracao);
-        }
-      });
-    }
-
-    mensagem.textContent = restauracaoConcluida
-      ? "Não foi possível salvar a exclusão. Os dados da categoria não foram alterados."
-      : "A exclusão falhou e houve um problema ao restaurar os dados. Recarregue a página e confira a biblioteca.";
+    mensagem.textContent = "Não foi possível salvar a exclusão. As alterações foram desfeitas.";
     exibirMensagemOperacao(mensagem.textContent);
     return;
   }
@@ -660,12 +573,123 @@ document.querySelector("#excluir-categoria").addEventListener("click", () => {
     : `Categoria "${categoria.nome}" excluída com sucesso. Não havia livros para mover.`);
 });
 
-// Inicializa as categorias, restaura o filtro, persiste os dados e monta a estante.
-ordenarCategorias();
-sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
-salvarCategorias();
-salvarLivros();
-renderizarLivros();
+
+// ===== FASE 3: Inicialização assíncrona do Drive =====
+async function inicializarApp() {
+  // Conectar callback de status do Drive (indicador "Salvando… / Salvo / Erro")
+  DriveAPI.setStatusCallback((texto, tipo) => {
+    const el = document.querySelector('#drive-sync-status');
+    if (!el) return;
+    el.textContent = texto;
+    el.className = 'drive-sync-status ' + tipo;
+    el.hidden = false;
+    if (tipo === 'saved') {
+      setTimeout(() => { el.hidden = true; }, 3000);
+    }
+  });
+
+  // === RENDER IMEDIATO: mostra dados iniciais do HTML ANTES do login ===
+  renderizarDadosIniciais();
+
+  // Se já estiver logado, inicializa Drive direto
+  if (window.estaConectado()) {
+    await inicializarDriveEPronto();
+    return;
+  }
+
+  // Senão, espera o evento de login (disparado por auth.js)
+  document.addEventListener('google-auth-changed', async (e) => {
+    if (e.detail.conectado) {
+      await inicializarDriveEPronto();
+    }
+  }, { once: true });
+}
+
+// Nova função: renderiza dados iniciais do HTML imediatamente (sem depender do Drive)
+function renderizarDadosIniciais() {
+  // Carrega categorias dos botões do HTML
+  categorias = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
+    .map((botao) => ({
+      id: botao.dataset.categoria,
+      nome: botao.textContent.replace(/\s+/g, " ").trim()
+    }))
+    .filter((categoria) => categoria.id && categoria.nome);
+
+  // Garante categoria "Sem categoria"
+  const temSemCategoria = categorias.some(c => c.id === idCategoriaSemCategoria);
+  if (!temSemCategoria) {
+    categorias.push({ id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria });
+  }
+
+  // Carrega livros dos cards iniciais do HTML
+  livros = criarLivrosIniciais();
+
+  // Renderiza tudo imediatamente
+  ordenarCategorias();
+  sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
+  renderizarLivros();
+}
+
+async function inicializarDriveEPronto() {
+  try {
+    await DriveAPI.init();              // carrega gapi + cria/busca pasta "Biblioteca Digital"
+    await carregarDoDrive();            // lê biblioteca.json da appDataFolder
+    drivePronto = true;
+
+    // Recarrega arrays locais com dados do Drive
+    categorias = await carregarCategorias();
+    livros = await carregarLivros();
+
+    // === FALLBACK: primeira execução → Drive vazio → usa cards iniciais do HTML ===
+    if (livros.length === 0) {
+      console.log('Primeira execução: Drive vazio → populando com livros iniciais do HTML');
+      livros = criarLivrosIniciais();
+      bibliotecaDrive.livros = livros;
+      // Salva no Drive para próximas vezes
+      DriveAPI.salvarBiblioteca(bibliotecaDrive);
+    }
+    // ========================================================================
+
+    // Re-renderiza tudo
+    ordenarCategorias();
+    sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
+    renderizarLivros();
+  } catch (e) {
+    console.error('Falha ao inicializar Drive:', e);
+    // Fallback: usa dados iniciais do HTML (não do Drive vazio)
+    drivePronto = true;
+    categorias = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
+      .map((botao) => ({
+        id: botao.dataset.categoria,
+        nome: botao.textContent.replace(/\s+/g, " ").trim()
+      }))
+      .filter((categoria) => categoria.id && categoria.nome);
+    // Garante "Sem categoria"
+    if (!categorias.some(c => c.id === idCategoriaSemCategoria)) {
+      categorias.push({ id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria });
+    }
+    livros = criarLivrosIniciais();
+    ordenarCategorias();
+    sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
+    renderizarLivros();
+  }
+}
+
+// Nova função: carrega biblioteca.json do Drive para bibliotecaDrive
+async function carregarDoDrive() {
+  try {
+    bibliotecaDrive = await DriveAPI.lerBiblioteca();
+    bibliotecaDrive.livros = bibliotecaDrive.livros || [];
+    bibliotecaDrive.categorias = bibliotecaDrive.categorias || [];
+  } catch (e) {
+    console.error('Erro ao ler biblioteca.json do Drive:', e);
+    bibliotecaDrive = { livros: [], categorias: [] };
+  }
+}
+
+// Inicia a aplicação
+inicializarApp();
+// =====================================================
 
 // Aplica o filtro da categoria selecionada no menu de navegação.
 secaoCategorias.addEventListener("click", (evento) => {
@@ -775,7 +799,7 @@ document.querySelector("#remover-arquivo").addEventListener("click", () => {
 });
 
 // Cadastra o livro, salva a coleção e atualiza a estante.
-formularioLivro.addEventListener("submit", (evento) => {
+formularioLivro.addEventListener("submit", async (evento) => {
   evento.preventDefault();
 
   const titulo = document.querySelector("#nome").value.trim();
@@ -791,10 +815,23 @@ formularioLivro.addEventListener("submit", (evento) => {
     return;
   }
 
-  const url = arquivo
-    ? URL.createObjectURL(arquivo)
-    : linkInformado;
-
+  let url = linkInformado;
+  if (arquivo) {
+    // Upload para o Drive (pasta "Biblioteca Digital")
+    const mensagemForm = document.querySelector("#mensagem-form");
+    mensagemForm.textContent = "Enviando arquivo para o Drive…";
+    try {
+      const resultado = await DriveAPI.uploadArquivo(arquivo, (progresso) => {
+        mensagemForm.textContent = `Enviando… ${Math.round(progresso)}%`;
+      });
+      url = resultado.webViewLink || `https://drive.google.com/file/d/${resultado.id}/view`;
+      mensagemForm.textContent = "Arquivo enviado! Salvando livro…";
+    } catch (e) {
+      console.error('Erro no upload:', e);
+      mensagemForm.textContent = "Erro ao enviar arquivo para o Drive.";
+      return;
+    }
+  }
   livros.push({
     id: `livro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     titulo,

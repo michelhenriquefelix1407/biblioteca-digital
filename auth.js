@@ -1,6 +1,11 @@
 (function () {
   const botaoAutenticacao = document.querySelector("#google-auth-button");
+  const rotuloBotaoAutenticacao = botaoAutenticacao.querySelector(
+    ".google-auth-button-label"
+  );
   const statusAutenticacao = document.querySelector("#google-auth-status");
+  const estadoConta = document.querySelector("#google-auth-state");
+  const emailContaElemento = document.querySelector("#google-auth-email");
   const mensagemErroPadrao = "Não foi possível conectar. Tente novamente.";
 
   let tokenAtual = null;
@@ -13,21 +18,24 @@
 
   function renderizarEstado(mensagem) {
     if (estadoAutenticacao === "connecting") {
-      botaoAutenticacao.textContent = "Conectando…";
+      rotuloBotaoAutenticacao.textContent = "Conectando…";
       botaoAutenticacao.disabled = true;
-      statusAutenticacao.textContent = "";
     } else if (estadoAutenticacao === "connected") {
-      botaoAutenticacao.textContent = "Desconectar";
+      rotuloBotaoAutenticacao.textContent = "Desconectar";
       botaoAutenticacao.disabled = false;
-      statusAutenticacao.textContent = emailConta
-        ? `Conectado · ${emailConta}`
-        : "Conectado";
     } else {
-      botaoAutenticacao.textContent = "Conectar com Google";
+      rotuloBotaoAutenticacao.textContent = "Conectar com Google";
       botaoAutenticacao.disabled = false;
-      statusAutenticacao.textContent = mensagem || "";
     }
 
+    const mostrarConta = estadoAutenticacao === "connected";
+    const mensagemStatus =
+      estadoAutenticacao === "error" ? mensagem || "" : "";
+    estadoConta.textContent = mostrarConta ? "Conectado" : mensagemStatus;
+    emailContaElemento.textContent = mostrarConta ? emailConta : "";
+    emailContaElemento.title = mostrarConta ? emailConta : "";
+    emailContaElemento.hidden = !mostrarConta || !emailConta;
+    statusAutenticacao.hidden = !mostrarConta && !mensagemStatus;
     statusAutenticacao.classList.toggle(
       "google-auth-status--error",
       estadoAutenticacao === "error"
