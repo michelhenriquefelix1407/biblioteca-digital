@@ -339,6 +339,8 @@ button:focus-visible,
     background: #1f5f7a;
     color: #fff;
     font: inherit;
+    font-size: 0.876rem;
+    font-weight: 600;
     text-align: center;
     text-decoration: none;
     line-height: 1.25;
