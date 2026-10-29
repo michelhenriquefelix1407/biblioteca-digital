@@ -332,8 +332,17 @@ button:focus-visible,
 
 /* Mantém legível o link para a área de gerenciamento no cabeçalho. */
 #gerenciar-biblioteca {
+    display: inline-block;
+    padding: 8px 12px;
+    border: 1px solid #4fa3c0;
+    border-radius: 8px;
+    background: #1f5f7a;
     color: #fff;
-    font-size: 1.0rem;
+    font: inherit;
+    text-align: center;
+    text-decoration: none;
+    line-height: 1.25;
+    cursor: pointer;
 }
 
 /* Alinha os controles de busca em uma linha. */
@@ -416,6 +425,16 @@ button:focus-visible,
     border: 1px solid #bdc9c3;
     border-radius: 8px;
     font: inherit;
+}
+
+/* Fixa a largura do filtro de categorias e corta nomes longos com reticências. */
+.buscar select {
+    flex: 0 0 180px;
+    width: 180px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Define a aparência padrão do botão de busca. */
@@ -972,13 +991,6 @@ section>h2 {
     }
 }
 
-
-
-
-
-
-
-
 /* Faz a seção de gerenciamento ocupar toda a largura disponível. */
 .gerenciar-biblioteca {
     grid-column: 1 / -1;
@@ -1236,6 +1248,7 @@ footer {
     /* Ajusta a largura do menu de categorias em telas menores. */
     .buscar select {
         flex: 1 1 auto;
+        width: auto;
         min-width: 0;
     }
 
