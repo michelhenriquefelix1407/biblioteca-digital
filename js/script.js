@@ -16,6 +16,13 @@ const formularioLivro = document.querySelector("#form-sugestao");
 const estante = document.querySelector("#estante");
 const gradeLivros = document.querySelector(".video-grid");
 
+// Bloqueia alterações enquanto o Drive não estiver carregado (evita perder dados).
+function exigirDrivePronto() {
+  if (drivePronto) return true;
+  exibirMensagemOperacao("Conecte-se ao Google para alterar a biblioteca.");
+  return false;
+}
+
 // Exibe o retorno temporariamente e reinicia o prazo quando surge outra mensagem.
 function exibirMensagemOperacao(texto) {
   const mensagem = document.querySelector("#mensagem-operacao-biblioteca");
@@ -212,6 +219,18 @@ function criarLivrosIniciais() {
     }));
 }
 
+// Captura UMA VEZ os dados iniciais do HTML, antes de qualquer renderização
+const livrosIniciaisHTML = criarLivrosIniciais();
+const categoriasIniciaisHTML = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
+  .map((botao) => ({
+    id: botao.dataset.categoria,
+    nome: botao.textContent.replace(/\s+/g, " ").trim()
+  }))
+  .filter((c) => c.id && c.nome);
+if (!categoriasIniciaisHTML.some((c) => c.id === idCategoriaSemCategoria)) {
+  categoriasIniciaisHTML.push({ id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria });
+}
+
 // Recupera os livros do Drive (bibliotecaDrive) ou fallback para cards iniciais do HTML.
 async function carregarLivros() {
   if (!drivePronto) {
@@ -223,7 +242,7 @@ async function carregarLivros() {
 
 // Salva livros no Drive (via biblioteca.json com debounce).
 function salvarLivros(livrosParaSalvar = livros) {
-  if (!drivePronto) return true;
+  if (!drivePronto) return false;
   bibliotecaDrive.livros = livrosParaSalvar;
   DriveAPI.salvarBiblioteca(bibliotecaDrive);
   return true;
@@ -456,6 +475,7 @@ document.querySelector("#limpar-busca").addEventListener("click", () => {
 // Cadastra uma categoria, rejeita nomes repetidos e atualiza os seletores.
 document.querySelector("#form-adicionar-categoria").addEventListener("submit", (evento) => {
   evento.preventDefault();
+  if (!exigirDrivePronto()) return;
 
   const campo = document.querySelector("#nova-categoria");
   const mensagem = document.querySelector("#mensagem-form-categoria");
@@ -490,6 +510,7 @@ document.querySelector("#form-adicionar-categoria").addEventListener("submit", (
 
 // Exclui a categoria selecionada e transfere seus livros para "Sem categoria".
 document.querySelector("#excluir-categoria").addEventListener("click", () => {
+  if (!exigirDrivePronto()) return;
   const seletorExclusao = document.querySelector("#categoria-para-excluir");
   const idCategoria = seletorExclusao.value;
   const categoria = categorias.find((item) => item.id === idCategoria);
@@ -575,8 +596,60 @@ document.querySelector("#excluir-categoria").addEventListener("click", () => {
 
 
 // ===== FASE 3: Inicialização assíncrona do Drive =====
+function renderizarDadosIniciais() {
+  categorias = structuredClone(categoriasIniciaisHTML);
+  livros = structuredClone(livrosIniciaisHTML);
+  ordenarCategorias();
+  sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
+  renderizarLivros();
+}
+
+let driveIniciando = false;
+
+async function inicializarDriveEPronto() {
+  if (driveIniciando || drivePronto) return;
+  driveIniciando = true;
+  try {
+    await DriveAPI.init();
+    await carregarDoDrive();   // LANÇA erro se a leitura falhar
+
+    // Reparo: remove livros inválidos (sem título)
+    bibliotecaDrive.livros = bibliotecaDrive.livros.filter((l) => l.titulo);
+
+    if (!bibliotecaDrive.iniciada) {
+      const vazio = bibliotecaDrive.livros.length === 0 && bibliotecaDrive.categorias.length === 0;
+      if (vazio) bibliotecaDrive.livros = structuredClone(livrosIniciaisHTML);
+      if (bibliotecaDrive.categorias.length === 0) {
+        bibliotecaDrive.categorias = structuredClone(categoriasIniciaisHTML);
+      }
+      bibliotecaDrive.iniciada = true;
+      DriveAPI.salvarBiblioteca(bibliotecaDrive);
+    }
+
+    drivePronto = true;
+    categorias = bibliotecaDrive.categorias;
+    livros = bibliotecaDrive.livros;
+    ordenarCategorias();
+    sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
+    renderizarLivros();
+  } catch (e) {
+    console.error("Falha ao inicializar Drive:", e);
+    drivePronto = false;   // não libera edição e NÃO grava nada
+    exibirMensagemOperacao("Não foi possível carregar sua biblioteca do Drive. Nada foi alterado. Tente conectar novamente.");
+  } finally {
+    driveIniciando = false;
+  }
+}
+
+async function carregarDoDrive() {
+  const dados = await DriveAPI.lerBiblioteca();   // se falhar, o erro sobe
+  bibliotecaDrive = dados || { livros: [], categorias: [] };
+  bibliotecaDrive.livros = bibliotecaDrive.livros || [];
+  bibliotecaDrive.categorias = bibliotecaDrive.categorias || [];
+}
+
 async function inicializarApp() {
-  // Conectar callback de status do Drive (indicador "Salvando… / Salvo / Erro")
+  // Indicador "Salvando… / Salvo / Erro"
   DriveAPI.setStatusCallback((texto, tipo) => {
     const el = document.querySelector('#drive-sync-status');
     if (!el) return;
@@ -588,102 +661,22 @@ async function inicializarApp() {
     }
   });
 
-  // === RENDER IMEDIATO: mostra dados iniciais do HTML ANTES do login ===
+  // Mostra os dados iniciais do HTML antes do login
   renderizarDadosIniciais();
 
-  // Se já estiver logado, inicializa Drive direto
-  if (window.estaConectado()) {
-    await inicializarDriveEPronto();
-    return;
-  }
-
-  // Senão, espera o evento de login (disparado por auth.js)
-  document.addEventListener('google-auth-changed', async (e) => {
+  // Ouvinte do login (sem { once: true }): trata conectar e desconectar
+  document.addEventListener("google-auth-changed", async (e) => {
     if (e.detail.conectado) {
       await inicializarDriveEPronto();
+    } else {
+      drivePronto = false;
+      renderizarDadosIniciais();
     }
-  }, { once: true });
-}
+  });
 
-// Nova função: renderiza dados iniciais do HTML imediatamente (sem depender do Drive)
-function renderizarDadosIniciais() {
-  // Carrega categorias dos botões do HTML
-  categorias = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
-    .map((botao) => ({
-      id: botao.dataset.categoria,
-      nome: botao.textContent.replace(/\s+/g, " ").trim()
-    }))
-    .filter((categoria) => categoria.id && categoria.nome);
-
-  // Garante categoria "Sem categoria"
-  const temSemCategoria = categorias.some(c => c.id === idCategoriaSemCategoria);
-  if (!temSemCategoria) {
-    categorias.push({ id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria });
-  }
-
-  // Carrega livros dos cards iniciais do HTML
-  livros = criarLivrosIniciais();
-
-  // Renderiza tudo imediatamente
-  ordenarCategorias();
-  sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
-  renderizarLivros();
-}
-
-async function inicializarDriveEPronto() {
-  try {
-    await DriveAPI.init();              // carrega gapi + cria/busca pasta "Biblioteca Digital"
-    await carregarDoDrive();            // lê biblioteca.json da appDataFolder
-    drivePronto = true;
-
-    // Recarrega arrays locais com dados do Drive
-    categorias = await carregarCategorias();
-    livros = await carregarLivros();
-
-    // === FALLBACK: primeira execução → Drive vazio → usa cards iniciais do HTML ===
-    if (livros.length === 0) {
-      console.log('Primeira execução: Drive vazio → populando com livros iniciais do HTML');
-      livros = criarLivrosIniciais();
-      bibliotecaDrive.livros = livros;
-      // Salva no Drive para próximas vezes
-      DriveAPI.salvarBiblioteca(bibliotecaDrive);
-    }
-    // ========================================================================
-
-    // Re-renderiza tudo
-    ordenarCategorias();
-    sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
-    renderizarLivros();
-  } catch (e) {
-    console.error('Falha ao inicializar Drive:', e);
-    // Fallback: usa dados iniciais do HTML (não do Drive vazio)
-    drivePronto = true;
-    categorias = [...secaoCategorias.querySelectorAll('.categoria-item:not([data-categoria="todos"])')]
-      .map((botao) => ({
-        id: botao.dataset.categoria,
-        nome: botao.textContent.replace(/\s+/g, " ").trim()
-      }))
-      .filter((categoria) => categoria.id && categoria.nome);
-    // Garante "Sem categoria"
-    if (!categorias.some(c => c.id === idCategoriaSemCategoria)) {
-      categorias.push({ id: idCategoriaSemCategoria, nome: nomeCategoriaSemCategoria });
-    }
-    livros = criarLivrosIniciais();
-    ordenarCategorias();
-    sincronizarCategoriaAtiva(document.querySelector("#categorias").value);
-    renderizarLivros();
-  }
-}
-
-// Nova função: carrega biblioteca.json do Drive para bibliotecaDrive
-async function carregarDoDrive() {
-  try {
-    bibliotecaDrive = await DriveAPI.lerBiblioteca();
-    bibliotecaDrive.livros = bibliotecaDrive.livros || [];
-    bibliotecaDrive.categorias = bibliotecaDrive.categorias || [];
-  } catch (e) {
-    console.error('Erro ao ler biblioteca.json do Drive:', e);
-    bibliotecaDrive = { livros: [], categorias: [] };
+  // Se já estiver conectado quando a página carregar
+  if (typeof estaConectado === "function" && estaConectado()) {
+    await inicializarDriveEPronto();
   }
 }
 
@@ -691,245 +684,253 @@ async function carregarDoDrive() {
 inicializarApp();
 // =====================================================
 
-// Aplica o filtro da categoria selecionada no menu de navegação.
-secaoCategorias.addEventListener("click", (evento) => {
-  const botao = evento.target.closest("button[data-categoria]");
-  if (!botao) return;
+  // Aplica o filtro da categoria selecionada no menu de navegação.
+  secaoCategorias.addEventListener("click", (evento) => {
+    const botao = evento.target.closest("button[data-categoria]");
+    if (!botao) return;
 
-  sincronizarCategoriaAtiva(botao.dataset.categoria);
-  renderizarLivros();
-});
+    sincronizarCategoriaAtiva(botao.dataset.categoria);
+    renderizarLivros();
+  });
 
-// Obtém as referências necessárias para selecionar e apresentar o arquivo do livro.
-const campoArquivoLivro = document.querySelector("#arquivo-livro");
-const campoTituloLivro = document.querySelector("#nome");
-const areaUploadLivro = document.querySelector("#upload-area-livro");
-const textoAreaUploadLivro = areaUploadLivro.querySelector(".upload-area-texto");
-const painelArquivoSelecionado = document.querySelector("#arquivo-selecionado");
-const mensagemUpload = document.querySelector("#mensagem-upload");
-let tituloSugeridoPeloArquivo = "";
+  // Obtém as referências necessárias para selecionar e apresentar o arquivo do livro.
+  const campoArquivoLivro = document.querySelector("#arquivo-livro");
+  const campoTituloLivro = document.querySelector("#nome");
+  const areaUploadLivro = document.querySelector("#upload-area-livro");
+  const textoAreaUploadLivro = areaUploadLivro.querySelector(".upload-area-texto");
+  const painelArquivoSelecionado = document.querySelector("#arquivo-selecionado");
+  const mensagemUpload = document.querySelector("#mensagem-upload");
+  let tituloSugeridoPeloArquivo = "";
 
-// Restaura a área de upload e limpa o título apenas se ele foi sugerido pelo arquivo.
-function limparArquivoSelecionado() {
-  campoArquivoLivro.value = "";
-  painelArquivoSelecionado.hidden = true;
-  painelArquivoSelecionado.querySelector(".arquivo-nome").textContent = "";
-  painelArquivoSelecionado.querySelector(".arquivo-tamanho").textContent = "";
-  areaUploadLivro.classList.remove("has-file");
-  textoAreaUploadLivro.textContent =
-    "Clique para selecionar ou arraste o arquivo aqui";
-  mensagemUpload.hidden = true;
-  mensagemUpload.textContent = "";
+  // Restaura a área de upload e limpa o título apenas se ele foi sugerido pelo arquivo.
+  function limparArquivoSelecionado() {
+    campoArquivoLivro.value = "";
+    painelArquivoSelecionado.hidden = true;
+    painelArquivoSelecionado.querySelector(".arquivo-nome").textContent = "";
+    painelArquivoSelecionado.querySelector(".arquivo-tamanho").textContent = "";
+    areaUploadLivro.classList.remove("has-file");
+    textoAreaUploadLivro.textContent =
+      "Clique para selecionar ou arraste o arquivo aqui";
+    mensagemUpload.hidden = true;
+    mensagemUpload.textContent = "";
 
-  if (campoTituloLivro.value === tituloSugeridoPeloArquivo) {
-    campoTituloLivro.value = "";
-  }
-  tituloSugeridoPeloArquivo = "";
-}
-
-// Exibe o arquivo escolhido, sugere um título com base no nome e mostra o tamanho.
-campoArquivoLivro.addEventListener("change", () => {
-  const arquivo = campoArquivoLivro.files[0];
-  if (!arquivo) {
-    limparArquivoSelecionado();
-    return;
+    if (campoTituloLivro.value === tituloSugeridoPeloArquivo) {
+      campoTituloLivro.value = "";
+    }
+    tituloSugeridoPeloArquivo = "";
   }
 
-  const tituloArquivo = arquivo.name
-    .replace(/\.[^.]+$/, "")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .slice(0, campoTituloLivro.maxLength);
+  // Exibe o arquivo escolhido, sugere um título com base no nome e mostra o tamanho.
+  campoArquivoLivro.addEventListener("change", () => {
+    const arquivo = campoArquivoLivro.files[0];
+    if (!arquivo) {
+      limparArquivoSelecionado();
+      return;
+    }
 
-  tituloSugeridoPeloArquivo = tituloArquivo;
-  campoTituloLivro.value = tituloArquivo;
+    const tituloArquivo = arquivo.name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim()
+      .slice(0, campoTituloLivro.maxLength);
 
-  painelArquivoSelecionado.querySelector(".arquivo-nome").textContent = arquivo.name;
-  painelArquivoSelecionado.querySelector(".arquivo-tamanho").textContent =
-    `${(arquivo.size / 1024 / 1024).toFixed(2)} MB`;
-  painelArquivoSelecionado.hidden = false;
-  areaUploadLivro.classList.add("has-file");
-  textoAreaUploadLivro.textContent = "Arquivo selecionado";
+    tituloSugeridoPeloArquivo = tituloArquivo;
+    campoTituloLivro.value = tituloArquivo;
 
-  mensagemUpload.textContent =
-    "Arquivo selecionado. Complete os dados e clique em Adicionar livro.";
-  mensagemUpload.hidden = false;
-});
+    painelArquivoSelecionado.querySelector(".arquivo-nome").textContent = arquivo.name;
+    painelArquivoSelecionado.querySelector(".arquivo-tamanho").textContent =
+      `${(arquivo.size / 1024 / 1024).toFixed(2)} MB`;
+    painelArquivoSelecionado.hidden = false;
+    areaUploadLivro.classList.add("has-file");
+    textoAreaUploadLivro.textContent = "Arquivo selecionado";
 
-// Permite selecionar o arquivo por arraste, validando a extensão antes de carregá-lo.
-areaUploadLivro.addEventListener("dragenter", (evento) => {
-  evento.preventDefault();
-  areaUploadLivro.classList.add("dragover");
-});
-
-areaUploadLivro.addEventListener("dragover", (evento) => {
-  evento.preventDefault();
-});
-
-areaUploadLivro.addEventListener("dragleave", (evento) => {
-  if (evento.relatedTarget && areaUploadLivro.contains(evento.relatedTarget)) {
-    return;
-  }
-  areaUploadLivro.classList.remove("dragover");
-});
-
-areaUploadLivro.addEventListener("drop", (evento) => {
-  evento.preventDefault();
-  areaUploadLivro.classList.remove("dragover");
-
-  const arquivo = evento.dataTransfer.files[0];
-  if (!arquivo) return;
-
-  const extensao = arquivo.name.split(".").pop().toLowerCase();
-  if (!["pdf", "epub", "mobi"].includes(extensao)) {
-    mensagemUpload.textContent = "Formato não permitido. Selecione um arquivo PDF, EPUB ou MOBI.";
+    mensagemUpload.textContent =
+      "Arquivo selecionado. Complete os dados e clique em Adicionar livro.";
     mensagemUpload.hidden = false;
-    return;
-  }
-
-  const transferencia = new DataTransfer();
-  transferencia.items.add(arquivo);
-  campoArquivoLivro.files = transferencia.files;
-  campoArquivoLivro.dispatchEvent(new Event("change", { bubbles: true }));
-});
-
-// Remove o arquivo selecionado e restaura a área de upload.
-document.querySelector("#remover-arquivo").addEventListener("click", () => {
-  limparArquivoSelecionado();
-});
-
-// Cadastra o livro, salva a coleção e atualiza a estante.
-formularioLivro.addEventListener("submit", async (evento) => {
-  evento.preventDefault();
-
-  const titulo = document.querySelector("#nome").value.trim();
-  const autor = document.querySelector("#autor").value.trim();
-  const categoriaId = document.querySelector("#tema").value;
-  const formato = document.querySelector("#formato").selectedOptions[0].textContent.trim();
-  const arquivo = campoArquivoLivro.files[0];
-  const linkInformado = document.querySelector("#link-livro").value.trim();
-
-  if (!arquivo && !linkInformado) {
-    document.querySelector("#mensagem-form").textContent =
-      "Selecione um arquivo ou informe um link.";
-    return;
-  }
-
-  let url = linkInformado;
-  if (arquivo) {
-    // Upload para o Drive (pasta "Biblioteca Digital")
-    const mensagemForm = document.querySelector("#mensagem-form");
-    mensagemForm.textContent = "Enviando arquivo para o Drive…";
-    try {
-      const resultado = await DriveAPI.uploadArquivo(arquivo, (progresso) => {
-        mensagemForm.textContent = `Enviando… ${Math.round(progresso)}%`;
-      });
-      url = resultado.webViewLink || `https://drive.google.com/file/d/${resultado.id}/view`;
-      mensagemForm.textContent = "Arquivo enviado! Salvando livro…";
-    } catch (e) {
-      console.error('Erro no upload:', e);
-      mensagemForm.textContent = "Erro ao enviar arquivo para o Drive.";
-      return;
-    }
-  }
-  livros.push({
-    id: `livro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    titulo,
-    autor,
-    categoriaId,
-    formato,
-    url,
-    favorito: false
-
   });
 
-  salvarLivros();
-  renderizarLivros();
-  formularioLivro.reset();
-  limparArquivoSelecionado();
-  document.querySelector("#mensagem-form").textContent = "Livro adicionado.";
-});
+  // Permite selecionar o arquivo por arraste, validando a extensão antes de carregá-lo.
+  areaUploadLivro.addEventListener("dragenter", (evento) => {
+    evento.preventDefault();
+    areaUploadLivro.classList.add("dragover");
+  });
 
-// Direciona as ações do card: favoritar, mover ou remover o livro.
-gradeLivros.addEventListener("click", (evento) => {
-  const botao = evento.target.closest("[data-acao-livro]");
-  if (!botao || !gradeLivros.contains(botao)) return;
+  areaUploadLivro.addEventListener("dragover", (evento) => {
+    evento.preventDefault();
+  });
 
-  const card = botao.closest(".video-card");
-  const livro = livros.find((item) => item.id === card?.dataset.livroId);
-  if (!livro) return;
+  areaUploadLivro.addEventListener("dragleave", (evento) => {
+    if (evento.relatedTarget && areaUploadLivro.contains(evento.relatedTarget)) {
+      return;
+    }
+    areaUploadLivro.classList.remove("dragover");
+  });
 
-  // Alterna o favorito, salva a alteração e atualiza a estante.
-  if (botao.dataset.acaoLivro === "alternar-favorito") {
-    livro.favorito = !Boolean(livro.favorito);
+  areaUploadLivro.addEventListener("drop", (evento) => {
+    evento.preventDefault();
+    areaUploadLivro.classList.remove("dragover");
+
+    const arquivo = evento.dataTransfer.files[0];
+    if (!arquivo) return;
+
+    const extensao = arquivo.name.split(".").pop().toLowerCase();
+    if (!["pdf", "epub", "mobi"].includes(extensao)) {
+      mensagemUpload.textContent = "Formato não permitido. Selecione um arquivo PDF, EPUB ou MOBI.";
+      mensagemUpload.hidden = false;
+      return;
+    }
+
+    const transferencia = new DataTransfer();
+    transferencia.items.add(arquivo);
+    campoArquivoLivro.files = transferencia.files;
+    campoArquivoLivro.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  // Remove o arquivo selecionado e restaura a área de upload.
+  document.querySelector("#remover-arquivo").addEventListener("click", () => {
+    limparArquivoSelecionado();
+  });
+
+  // Cadastra o livro, salva a coleção e atualiza a estante.
+  formularioLivro.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    if (!exigirDrivePronto()) return;
+
+    const titulo = document.querySelector("#nome").value.trim();
+    const autor = document.querySelector("#autor").value.trim();
+    const categoriaId = document.querySelector("#tema").value;
+    const formato = document.querySelector("#formato").selectedOptions[0].textContent.trim();
+    const arquivo = campoArquivoLivro.files[0];
+    const linkInformado = document.querySelector("#link-livro").value.trim();
+
+    if (!arquivo && !linkInformado) {
+      document.querySelector("#mensagem-form").textContent =
+        "Selecione um arquivo ou informe um link.";
+      return;
+    }
+
+    let url = linkInformado;
+    let driveFileId = null;
+    if (arquivo) {
+      // Upload para o Drive (pasta "Biblioteca Digital")
+      const mensagemForm = document.querySelector("#mensagem-form");
+      mensagemForm.textContent = "Enviando arquivo para o Drive…";
+      try {
+        const resultado = await DriveAPI.uploadArquivo(arquivo, (progresso) => {
+          mensagemForm.textContent = `Enviando… ${Math.round(progresso)}%`;
+        });
+        url = resultado.webViewLink || `https://drive.google.com/file/d/${resultado.id}/view`;
+        driveFileId = resultado.id;
+        mensagemForm.textContent = "Arquivo enviado! Salvando livro…";
+      } catch (e) {
+        console.error('Erro no upload:', e);
+        mensagemForm.textContent = "Erro ao enviar arquivo para o Drive.";
+        return;
+      }
+    }
+    livros.push({
+      id: `livro-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      titulo,
+      autor,
+      categoriaId,
+      formato,
+      url,
+      driveFileId,
+      favorito: false
+
+    });
+
     salvarLivros();
+    DriveAPI.salvarAgora();
     renderizarLivros();
-    return;
-  }
+    formularioLivro.reset();
+    limparArquivoSelecionado();
+    document.querySelector("#mensagem-form").textContent = "Livro adicionado.";
+  });
 
-  // Abre o seletor de destino sem alterar a categoria do livro.
-  if (botao.dataset.acaoLivro === "abrir-mover") {
-    const controles = card.querySelector(".controles-mover-livro");
-    const destino = controles.querySelector("select");
-    preencherDestinos(destino);
-    controles.hidden = false;
-    destino.focus();
-    return;
-  }
+  // Direciona as ações do card: favoritar, mover ou remover o livro.
+  gradeLivros.addEventListener("click", (evento) => {
+    const botao = evento.target.closest("[data-acao-livro]");
+    if (!botao || !gradeLivros.contains(botao)) return;
 
-  // Valida e salva a nova categoria escolhida para o livro.
-  if (botao.dataset.acaoLivro === "confirmar-mover") {
-    const controles = card.querySelector(".controles-mover-livro");
-    const destino = controles.querySelector("select").value;
-    const mensagem = controles.querySelector(".mensagem-mover-livro");
+    const card = botao.closest(".video-card");
+    const livro = livros.find((item) => item.id === card?.dataset.livroId);
+    if (!livro) return;
 
-    if (!destino) {
-      mensagem.textContent = "Escolha uma categoria de destino.";
+    // Alterna o favorito, salva a alteração e atualiza a estante.
+    if (botao.dataset.acaoLivro === "alternar-favorito") {
+      if (!exigirDrivePronto()) return;
+      livro.favorito = !Boolean(livro.favorito);
+      salvarLivros();
+      renderizarLivros();
       return;
     }
 
-    if (destino === livro.categoriaId) {
-      mensagem.textContent = "Este livro já está nessa categoria.";
+    // Abre o seletor de destino sem alterar a categoria do livro.
+    if (botao.dataset.acaoLivro === "abrir-mover") {
+      const controles = card.querySelector(".controles-mover-livro");
+      const destino = controles.querySelector("select");
+      preencherDestinos(destino);
+      controles.hidden = false;
+      destino.focus();
       return;
     }
 
-    const categoriaDestino = categorias.find(
-      (categoria) => categoria.id === destino
-    );
-    const livrosAtualizados = livros.map((item) =>
-      item.id === livro.id ? { ...item, categoriaId: destino } : item
-    );
+    // Valida e salva a nova categoria escolhida para o livro.
+    if (botao.dataset.acaoLivro === "confirmar-mover") {
+      if (!exigirDrivePronto()) return;
+      const controles = card.querySelector(".controles-mover-livro");
+      const destino = controles.querySelector("select").value;
+      const mensagem = controles.querySelector(".mensagem-mover-livro");
 
-    if (!salvarLivros(livrosAtualizados)) {
-      mensagem.textContent = "Não foi possível salvar a mudança de categoria.";
-      exibirMensagemOperacao(mensagem.textContent);
+      if (!destino) {
+        mensagem.textContent = "Escolha uma categoria de destino.";
+        return;
+      }
+
+      if (destino === livro.categoriaId) {
+        mensagem.textContent = "Este livro já está nessa categoria.";
+        return;
+      }
+
+      const categoriaDestino = categorias.find(
+        (categoria) => categoria.id === destino
+      );
+      const livrosAtualizados = livros.map((item) =>
+        item.id === livro.id ? { ...item, categoriaId: destino } : item
+      );
+
+      if (!salvarLivros(livrosAtualizados)) {
+        mensagem.textContent = "Não foi possível salvar a mudança de categoria.";
+        exibirMensagemOperacao(mensagem.textContent);
+        return;
+      }
+
+      livros = livrosAtualizados;
+      renderizarLivros();
+      exibirMensagemOperacao(
+        `Livro "${livro.titulo}" movido para a categoria "${categoriaDestino.nome}" com sucesso.`
+      );
       return;
     }
 
-    livros = livrosAtualizados;
-    renderizarLivros();
-    exibirMensagemOperacao(
-      `Livro "${livro.titulo}" movido para a categoria "${categoriaDestino.nome}" com sucesso.`
-    );
-    return;
-  }
+    // Remove o livro somente após a confirmação da pessoa.
+    if (botao.dataset.acaoLivro === "excluir") {
+      if (!exigirDrivePronto()) return;
+      const confirmacao = window.confirm(`Excluir o livro "${livro.titulo}"?`);
+      if (!confirmacao) return;
 
-  // Remove o livro somente após a confirmação da pessoa.
-  if (botao.dataset.acaoLivro === "excluir") {
-    const confirmacao = window.confirm(`Excluir o livro "${livro.titulo}"?`);
-    if (!confirmacao) return;
-
-    livros = livros.filter((item) => item.id !== livro.id);
-    salvarLivros();
-    renderizarLivros();
-  }
-});
-
-// Fecha os menus de ações quando a pessoa clica fora deles.
-document.addEventListener("click", (evento) => {
-  document.querySelectorAll(".menu-acoes-livro[open]").forEach((menu) => {
-    if (!menu.contains(evento.target)) {
-      menu.open = false;
+      livros = livros.filter((item) => item.id !== livro.id);
+      salvarLivros();
+      renderizarLivros();
     }
   });
-});
+
+  // Fecha os menus de ações quando a pessoa clica fora deles.
+  document.addEventListener("click", (evento) => {
+    document.querySelectorAll(".menu-acoes-livro[open]").forEach((menu) => {
+      if (!menu.contains(evento.target)) {
+        menu.open = false;
+      }
+    });
+  });
